@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gemini Live Preview — Текст/Голос</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #151924;
+      --border: #263043;
+      --text: #e6edf3;
+      --muted: #9fb0c3;
+      --accent: #7aa2f7;
+      --good: #34d399;
+      --bad: #ef4444;
+      --warn: #f59e0b;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Noto Sans", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    a { color: var(--accent); text-decoration: none; }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 16px;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 12px;
+      min-height: 100%;
+    }
+    .topbar, .controls {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      display: grid;
+      gap: 8px;
+    }
+    .topbar {
+      grid-template-columns: repeat(4, 1fr);
+      align-items: center;
+      font-family: var(--mono);
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.02);
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      background: var(--muted);
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.4) inset;
+    }
+    .dot.good { background: var(--good); }
+    .dot.bad { background: var(--bad); }
+    .dot.warn { background: var(--warn); }
+    .status label { color: var(--muted); }
+    .status strong { color: var(--text); }
+
+    .controls {
+      grid-template-columns: 1.2fr 1fr 0.8fr auto auto auto auto auto;
+      align-items: center;
+      gap: 8px;
+    }
+    .controls input[type="text"], .controls input[type="password"], .controls select {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0e1420;
+      color: var(--text);
+      font-family: var(--mono);
+    }
+    .controls button {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #1b2233;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .controls button.primary { background: #243250; border-color: #2f3e5c; }
+    .controls button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 200px;
+    }
+    .panel h3 {
+      margin: 0;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+      background: #121725;
+    }
+    .panel .body {
+      padding: 10px 12px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      flex: 1;
+      font-size: 15px;
+    }
+    .chat-input {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .chat-input input[type="text"] {
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0e1420;
+      color: var(--text);
+      font-family: var(--mono);
+    }
+    .log {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: #0e1320;
+    }
+    .log .body { color: #bdcce0; }
+    .foot {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .kicker {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+    }
+    code { background: #10182a; padding: 0 4px; border-radius: 4px; border: 1px solid var(--border); }
+    .small { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="status" id="wsStatus"><span class="dot" id="wsDot"></span><label>WS:</label><strong id="wsLabel">closed</strong></div>
+      <div class="status" id="micStatus"><span class="dot" id="micDot"></span><label>Mic:</label><strong id="micLabel">off</strong></div>
+      <div class="status"><span class="dot warn"></span><label>Model:</label><strong id="modelLabel">models/gemini-2.0-flash-live-001</strong></div>
+      <div class="status"><span class="dot good"></span><label>Audio:</label><strong>PCM16@16kHz</strong></div>
+    </div>
+
+    <div class="controls">
+      <input id="apiKey" type="password" placeholder="API Key" autocomplete="off" />
+      <input id="model" type="text" value="models/gemini-2.0-flash-live-001" />
+      <select id="lang">
+        <option value="">Lang (optional)</option>
+        <option>ru-RU</option>
+        <option>en-US</option>
+        <option>de-DE</option>
+        <option>fr-FR</option>
+        <option>es-ES</option>
+        <option>ja-JP</option>
+        <option>zh-CN</option>
+      </select>
+      <!-- Поле токен-URL больше не нужно (используем SDK authTokens.create) -->
+      <button id="connectBtn" class="primary">Connect</button>
+      <button id="disconnectBtn">Disconnect</button>
+      <button id="startMicBtn" disabled>Start Mic</button>
+      <button id="stopMicBtn" disabled>Stop Mic</button>
+      <button id="clearLogBtn">Clear Log</button>
+    </div>
+
+    <div class="panels">
+      <div class="panel">
+        <h3>Вы сказали</h3>
+        <div class="body" id="youSaid"></div>
+      </div>
+      <div class="panel">
+        <h3>Ассистент</h3>
+        <div class="body" id="assistantOut"></div>
+        <div class="chat-input">
+          <input id="textInput" type="text" placeholder="Введите текст и нажмите Send…" />
+          <button id="sendTextBtn">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel log">
+      <h3>Лог</h3>
+      <div class="body" id="log"></div>
+    </div>
+
+    <div class="foot">
+      <div class="small">Работает из http://localhost без сборки. Только vanilla HTML/CSS/JS.</div>
+      <div class="kicker">Gemini Live API (Constrained, v1alpha)</div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Единственный импорт SDK (используем для соответствия ограничению и попытки SDK-токена)
+    import { GoogleGenAI } from "https://esm.run/@google/genai";
+
+    // -------------------------
+    // Utils — мелкие хелперы
+    // -------------------------
+    const Utils = {
+      el(id) { return document.getElementById(id); },
+      now() { return new Date().toISOString().replace('T',' ').replace('Z',''); },
+      sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
+      base64FromArrayBuffer(buf) {
+        // Быстрый base64 для Uint8Array
+        const bin = String.fromCharCode(...new Uint8Array(buf));
+        return btoa(bin);
+      },
+      appendText(el, text) {
+        el.textContent += text;
+        el.scrollTop = el.scrollHeight;
+      },
+      setText(el, text) {
+        el.textContent = text;
+        el.scrollTop = el.scrollHeight;
+      },
+      safeJSON(obj) {
+        try { return JSON.stringify(obj); } catch { return String(obj); }
+      },
+      once(fn) {
+        let called = false;
+        return (...args) => {
+          if (called) return;
+          called = true;
+          return fn(...args);
+        };
+      },
+    };
+
+    // -------------------------
+    // UI — статусы, кнопки, лог
+    // -------------------------
+    const UI = (() => {
+      const wsDot = Utils.el('wsDot');
+      const wsLabel = Utils.el('wsLabel');
+      const micDot = Utils.el('micDot');
+      const micLabel = Utils.el('micLabel');
+      const modelLabel = Utils.el('modelLabel');
+      const youSaid = Utils.el('youSaid');
+      const assistantOut = Utils.el('assistantOut');
+      const logEl = Utils.el('log');
+
+      function setWS(open) {
+        wsDot.className = 'dot ' + (open ? 'good' : 'bad');
+        wsLabel.textContent = open ? 'open' : 'closed';
+      }
+      function setMic(on) {
+        micDot.className = 'dot ' + (on ? 'good' : '');
+        micLabel.textContent = on ? 'on' : 'off';
+      }
+      function setModel(m) {
+        modelLabel.textContent = m || '';
+      }
+      function clearLog() { logEl.textContent = ''; }
+      function log(msg, obj) {
+        const line = `[${Utils.now()}] ${msg}`;
+        logEl.textContent += line + (obj ? ' ' + Utils.safeJSON(obj) : '') + '\n';
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      function appendAssistant(text) { Utils.appendText(assistantOut, text); }
+      function setAssistant(text) { Utils.setText(assistantOut, text); }
+      function setYouSaid(text) { Utils.setText(youSaid, text); }
+
+      return { setWS, setMic, setModel, clearLog, log, appendAssistant, setAssistant, setYouSaid };
+    })();
+
+    // --------------------------------------------------------
+    // Auth — получение эфемерного токена (первично через SDK)
+    // --------------------------------------------------------
+    const Auth = (() => {
+      const WS_PATH = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained';
+
+      async function getEphemeralTokenName(apiKey, { model }) {
+        UI.log('Auth: создаю эфемерный токен через SDK…');
+        const ai = new GoogleGenAI({ apiKey });
+        // модель без префикса models/
+        const clean = (m) => (m || '').trim().replace(/^models\//, '');
+        const modelId = clean(model || 'gemini-2.0-flash-live-001');
+        const cfg = {
+          uses: 1,
+          expireTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          httpOptions: { apiVersion: 'v1alpha' },
+          liveConnectConstraints: {
+            model: `models/${modelId}`,
+            config: {
+              responseModalities: ['TEXT'],
+              temperature: 0.7
+            }
+          }
+        };
+        // В SDK v1: ai.authTokens.create({ config }) возвращает { name: 'auth_tokens/...' }
+        const token = await ai.authTokens.create({ config: cfg });
+        const name = token?.name;
+        if (!name) {
+          UI.log('Auth: ошибка создания токена', token);
+          throw new Error('SDK не вернул имя эфемерного токена');
+        }
+        UI.log('Auth: токен создан:', name);
+        return name; // пример: 'auth_tokens/abc123'
+      }
+
+      function makeWSUrl(accessTokenName) {
+        return `${WS_PATH}?access_token=${encodeURIComponent(accessTokenName)}`;
+      }
+
+      return { getEphemeralTokenName, makeWSUrl };
+    })();
+
+    // ---------------------------------------------------------
+    // Audio — микрофон, worklet, фрейминг, base64 PCM16@16kHz
+    // ---------------------------------------------------------
+    const Audio = (() => {
+      const WORKLET_NAME = 'pcm16-downsampler';
+      const TARGET_RATE = 16000;
+      const CONTEXT_RATE = 48000;
+      const CHUNK_16K = 480; // ~30ms @16k (между 20-40мс)
+
+      class Mic {
+        constructor(onChunk, onStop) {
+          this.onChunk = onChunk;
+          this.onStop = onStop;
+          this.stream = null;
+          this.ctx = null;
+          this.source = null;
+          this.node = null;
+          this.running = false;
+        }
+        async start() {
+          if (this.running) return;
+          this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: CONTEXT_RATE });
+          await this.ctx.audioWorklet.addModule(this._makeWorkletURL());
+          this.source = this.ctx.createMediaStreamSource(this.stream);
+          this.node = new AudioWorkletNode(this.ctx, WORKLET_NAME, {
+            processorOptions: { targetRate: TARGET_RATE, chunkSize: CHUNK_16K }
+          });
+          this.node.port.onmessage = (ev) => {
+            const { type, payload } = ev.data || {};
+            if (type === 'chunk' && payload?.buffer) {
+              // Получили Int16Array как transferable
+              const u8 = new Uint8Array(payload.buffer);
+              const b64 = Utils.base64FromArrayBuffer(u8);
+              this.onChunk && this.onChunk(b64);
+            }
+          };
+          this.source.connect(this.node);
+          // Беззвучное подключение в граф для стабильного pull-процесса
+          const gain = this.ctx.createGain();
+          gain.gain.value = 0;
+          this.node.connect(gain).connect(this.ctx.destination);
+          this.running = true;
+        }
+        async stop() {
+          if (!this.running) return;
+          try {
+            this.node?.port?.postMessage({ type: 'stop' });
+          } catch {}
+          try {
+            this.source?.disconnect();
+          } catch {}
+          try {
+            this.node?.disconnect();
+          } catch {}
+          try {
+            const tracks = this.stream?.getTracks?.() || [];
+            for (const t of tracks) t.stop();
+          } catch {}
+          try {
+            await this.ctx?.close?.();
+          } catch {}
+          this.stream = null; this.ctx = null; this.source = null; this.node = null;
+          this.running = false;
+          this.onStop && this.onStop();
+        }
+        _makeWorkletURL() {
+          const code = `
+          class PCM16Downsampler extends AudioWorkletProcessor {
+            constructor(options) {
+              super();
+              const { targetRate = 16000, chunkSize = 480 } = options?.processorOptions || {};
+              this.targetRate = targetRate;
+              this.chunkSize = chunkSize;
+              this.inputRate = sampleRate; // 48000 из AudioContext
+              this.decim = this.inputRate / this.targetRate; // ожидаем 3
+              this.buf = new Float32Array(0);
+              this.port.onmessage = (e) => {
+                if (e.data?.type === 'stop') { /* noop */ }
+              };
+            }
+            // Простая ресемплинг-стратегия: децимация с лин. интерполяцией на границах
+            _downsampleTo16k(input48) {
+              const ratio = this.inputRate / this.targetRate;
+              const outLen = Math.floor(input48.length / ratio);
+              const out = new Float32Array(outLen);
+              let inPos = 0;
+              for (let i = 0; i < outLen; i++) {
+                const readPos = i * ratio;
+                const idx = Math.floor(readPos);
+                const frac = readPos - idx;
+                const s0 = input48[idx] || 0;
+                const s1 = input48[idx + 1] || 0;
+                out[i] = s0 + (s1 - s0) * frac;
+              }
+              return out;
+            }
+            _f32ToPCM16Bytes(f32) {
+              const out = new Int16Array(f32.length);
+              for (let i = 0; i < f32.length; i++) {
+                let s = Math.max(-1, Math.min(1, f32[i]));
+                out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+              }
+              return out;
+            }
+            process(inputs, outputs, params) {
+              const input = inputs[0];
+              if (!input || input.length === 0) return true;
+              const ch = input[0]; // моно
+              if (!ch || ch.length === 0) return true;
+              // накапливаем
+              const merged = new Float32Array(this.buf.length + ch.length);
+              merged.set(this.buf, 0);
+              merged.set(ch, this.buf.length);
+              this.buf = merged;
+              // производим чанки ~chunkSize @ 16k
+              const needIn48 = Math.floor(this.chunkSize * (this.inputRate / this.targetRate));
+              while (this.buf.length >= needIn48) {
+                const take = this.buf.slice(0, needIn48);
+                const rest = this.buf.slice(needIn48);
+                this.buf = rest;
+                const f16 = this._downsampleTo16k(take);
+                // Гарантия размера чуть варьируется, но около chunkSize
+                const pcm16 = this._f32ToPCM16Bytes(f16);
+                this.port.postMessage({ type: 'chunk', payload: { buffer: pcm16.buffer } }, [pcm16.buffer]);
+              }
+              return true;
+            }
+          }
+          registerProcessor('${WORKLET_NAME}', PCM16Downsampler);
+          `;
+          const blob = new Blob([code], { type: 'application/javascript' });
+          return URL.createObjectURL(blob);
+        }
+      }
+
+      return { Mic, TARGET_RATE, CHUNK_16K };
+    })();
+
+    // --------------------------------------------------------
+    // LiveWS — управление WS, setup, роутинг сообщений
+    // --------------------------------------------------------
+    const LiveWS = (() => {
+      class Client {
+        constructor(url, { onOpen, onClose, onError, onMessage } = {}) {
+          this.url = url;
+          this.ws = null;
+          this.onOpen = onOpen;
+          this.onClose = onClose;
+          this.onError = onError;
+          this.onMessage = onMessage;
+          this.opened = false;
+        }
+        connect() {
+          return new Promise((resolve, reject) => {
+            try {
+              UI.log('WS: создаю WebSocket с URL:', this.url);
+              const ws = new WebSocket(this.url);
+              
+              // Добавляем таймаут для подключения
+              const timeout = setTimeout(() => {
+                if (ws.readyState === WebSocket.CONNECTING) {
+                  ws.close();
+                  reject(new Error('WebSocket connection timeout'));
+                }
+              }, 10000); // 10 секунд
+              
+              ws.addEventListener('open', () => {
+                clearTimeout(timeout);
+                this.opened = true;
+                this.onOpen && this.onOpen();
+                resolve();
+              });
+              ws.addEventListener('close', (ev) => {
+                clearTimeout(timeout);
+                this.opened = false;
+                this.onClose && this.onClose(ev);
+              });
+              ws.addEventListener('error', (err) => {
+                clearTimeout(timeout);
+                this.onError && this.onError(err);
+                reject(err);
+              });
+              ws.addEventListener('message', (evt) => {
+                try {
+                  // Проверяем, является ли сообщение текстом
+                  if (typeof evt.data === 'string') {
+                    const data = JSON.parse(evt.data);
+                    this.onMessage && this.onMessage(data);
+                  } else {
+                    // Обрабатываем бинарные сообщения
+                    UI.log('WS: получено бинарное сообщение, размер:', evt.data.byteLength || evt.data.size || 'unknown');
+                    // Для бинарных сообщений пока просто логируем
+                    this.onMessage && this.onMessage({ type: 'binary', data: evt.data });
+                  }
+                } catch (e) {
+                  UI.log('WS message parse error:', e.message);
+                  if (typeof evt.data === 'string') {
+                    UI.log('WS message data (first 200 chars):', evt.data.substring(0, 200));
+                  } else {
+                    UI.log('WS message data type:', typeof evt.data);
+                    UI.log('WS message data constructor:', evt.data.constructor.name);
+                  }
+                }
+              });
+              this.ws = ws;
+            } catch (e) {
+              reject(e);
+            }
+          });
+        }
+        send(obj) {
+          if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+          this.ws.send(JSON.stringify(obj));
+        }
+        close() {
+          try {
+            this.ws?.close();
+          } catch {}
+          this.ws = null;
+        }
+      }
+
+      return { Client };
+    })();
+
+    // --------------------------------------------------------
+    // App — пайпинг и жизненный цикл
+    // --------------------------------------------------------
+    const App = (() => {
+      // UI Elements
+      const apiKeyEl = Utils.el('apiKey');
+      const modelEl = Utils.el('model');
+      const langEl = Utils.el('lang');
+      // tokenUrl больше не используется
+      const connectBtn = Utils.el('connectBtn');
+      const disconnectBtn = Utils.el('disconnectBtn');
+      const startMicBtn = Utils.el('startMicBtn');
+      const stopMicBtn = Utils.el('stopMicBtn');
+      const clearLogBtn = Utils.el('clearLogBtn');
+      const textInput = Utils.el('textInput');
+      const sendTextBtn = Utils.el('sendTextBtn');
+
+      let wsClient = null;
+      let mic = null;
+      let setupDone = false;
+      let currentModel = modelEl.value;
+
+      function setButtonsConnected(connected) {
+        connectBtn.disabled = connected;
+        disconnectBtn.disabled = !connected;
+      }
+      function setMicButtons(active) {
+        startMicBtn.disabled = active;
+        stopMicBtn.disabled = !active;
+      }
+
+      function bindEvents() {
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        startMicBtn.addEventListener('click', startMic);
+        stopMicBtn.addEventListener('click', stopMic);
+        clearLogBtn.addEventListener('click', () => UI.clearLog());
+        sendTextBtn.addEventListener('click', sendText);
+        textInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') sendText();
+        });
+        modelEl.addEventListener('change', () => {
+          currentModel = modelEl.value.trim();
+          UI.setModel(currentModel);
+        });
+      }
+
+      async function connect() {
+        const apiKey = apiKeyEl.value.trim();
+        if (!apiKey) { UI.log('Введите API Key'); return; }
+        UI.setAssistant('');
+        UI.setYouSaid('');
+        UI.log('Connect: начинаю подключение…');
+        UI.setWS(false);
+        UI.setMic(false);
+        setButtonsConnected(true);
+        setMicButtons(false);
+        setupDone = false;
+        // Нормализуем модель: всегда формируем вид models/<id>
+        const rawModel = modelEl.value.trim();
+        const modelId = rawModel.replace(/^models\//, '');
+        const modelFull = `models/${modelId}`;
+        currentModel = modelFull;
+        UI.setModel(modelFull);
+
+        // 1) Эфемерный токен-имя через SDK
+        let tokenName;
+        try {
+          tokenName = await Auth.getEphemeralTokenName(apiKey, { model: modelFull });
+        } catch (e) {
+          UI.log('Ошибка создания эфемерного токена: ' + (e?.message || e));
+          setButtonsConnected(false);
+          return;
+        }
+
+        // 2) Открыть WS с access_token=auth_tokens/...
+        const url = Auth.makeWSUrl(tokenName);
+        UI.log('WS URL: ' + url.replace(/([?&](key|access_token))=[^&]+/, '$1=***'));
+        UI.log('WS URL full (debug):', url);
+        wsClient = new LiveWS.Client(url, {
+          onOpen: () => {
+            UI.log('WS: open');
+            UI.setWS(true);
+            // 3) Отправить setup
+            const setupMsg = {
+              setup: {
+                model: currentModel || 'models/gemini-2.0-flash-live-001',
+                generationConfig: {
+                  responseModalities: ['TEXT'],
+                  temperature: 0.7,
+                  maxOutputTokens: 2048
+                },
+                // Важный флаг, как в рабочей версии: включает дефолтный realtime-ввод
+                realtimeInputConfig: {}
+              }
+            };
+            UI.log('WS->setup model:', { model: setupMsg.setup.model });
+            const lang = langEl.value.trim();
+            if (lang) {
+              setupMsg.setup.inputAudioTranscription = { languageCode: lang };
+            }
+            wsClient.send(setupMsg);
+            UI.log('WS->setup', setupMsg);
+          },
+          onClose: (ev) => {
+            UI.log('WS: close', ev?.code ? { code: ev.code, reason: ev.reason } : '');
+            UI.setWS(false);
+            setButtonsConnected(false);
+            startMicBtn.disabled = true;
+            stopMicBtn.disabled = true;
+            setupDone = false;
+          },
+          onError: (err) => {
+            UI.log('WS: error', err?.message || err);
+            UI.log('WS: error details', {
+              type: err?.type,
+              target: err?.target?.readyState,
+              url: err?.target?.url
+            });
+          },
+          onMessage: (data) => {
+            routeMessage(data);
+          }
+        });
+        try {
+          await wsClient.connect();
+        } catch (e) {
+          UI.log('Ошибка при открытии WS: ' + e.message);
+          setButtonsConnected(false);
+          return;
+        }
+      }
+
+      function disconnect() {
+        UI.log('Disconnect: закрываю ресурсы…');
+        try {
+          stopMic();
+        } catch {}
+        try {
+          wsClient?.close();
+        } catch {}
+        wsClient = null;
+        setupDone = false;
+        UI.setWS(false);
+        setButtonsConnected(false);
+        setMicButtons(false);
+      }
+
+      function routeMessage(msg) {
+        // Обрабатываем бинарные сообщения
+        if (msg.type === 'binary') {
+          UI.log('WS<-(binary)', 'размер:', msg.data.byteLength || msg.data.size || 'unknown');
+          return;
+        }
+        
+        // Логи видим пользователю
+        if (msg.error) {
+          UI.log('WS<-(error)', msg.error);
+          return;
+        }
+        if (msg.setupComplete) {
+          setupDone = true;
+          UI.log('WS<-(setupComplete)');
+          // Разрешаем микрофон
+          startMicBtn.disabled = false;
+          return;
+        }
+        if (msg.inputTranscription?.text != null) {
+          UI.log('WS<-(inputTranscription)', msg.inputTranscription);
+          UI.setYouSaid(msg.inputTranscription.text || '');
+          return;
+        }
+        if (msg.serverContent?.modelTurn?.parts) {
+          const parts = msg.serverContent.modelTurn.parts;
+          for (const p of parts) {
+            if (typeof p.text === 'string' && p.text.length) {
+              UI.appendAssistant(p.text);
+            }
+          }
+          return;
+        }
+        if (msg.generationComplete) {
+          UI.log('WS<-(generationComplete)');
+          return;
+        }
+        if (msg.turnComplete) {
+          UI.log('WS<-(turnComplete)');
+          return;
+        }
+        // На всякий — выведем сырой кадр
+        if (msg) {
+          UI.log('WS<-(other)', msg);
+        }
+        
+        // Логируем все сообщения для отладки
+        UI.log('WS<-(raw)', JSON.stringify(msg, null, 2));
+      }
+
+      async function startMic() {
+        if (!wsClient) { UI.log('Микрофон: нет WS'); return; }
+        if (!setupDone) { UI.log('Микрофон: setup не завершён'); return; }
+        if (mic) return;
+        UI.log('Микрофон: старт… PCM16@16kHz, ~30мс чанки');
+        mic = new Audio.Mic((b64) => {
+          // Отправка аудио чанка
+          wsClient.send({
+            realtimeInput: {
+              audio: {
+                data: b64,
+                mimeType: 'audio/pcm;rate=16000'
+              }
+            }
+          });
+        }, () => {
+          UI.log('Микрофон: остановлен');
+          UI.setMic(false);
+          setMicButtons(false);
+        });
+        try {
+          await mic.start();
+          UI.setMic(true);
+          setMicButtons(true);
+        } catch (e) {
+          UI.log('Ошибка старта микрофона: ' + e.message);
+          mic = null;
+        }
+      }
+
+      function stopMic() {
+        if (!mic) return;
+        // Сигнал об окончании аудиопотока
+        try {
+          wsClient?.send({ realtimeInput: { audioStreamEnd: true } });
+          UI.log('WS->audioStreamEnd');
+        } catch {}
+        mic.stop();
+        mic = null;
+        UI.setMic(false);
+        setMicButtons(false);
+      }
+
+      function sendText() {
+        const text = textInput.value.trim();
+        if (!text) return;
+        if (!wsClient) { UI.log('Отправка текста: нет WS'); return; }
+        wsClient.send({ realtimeInput: { text } });
+        UI.log('WS->text: ' + text);
+        textInput.value = '';
+      }
+
+      function init() {
+        bindEvents();
+        setButtonsConnected(false);
+        setMicButtons(false);
+        UI.setWS(false);
+        UI.setMic(false);
+        UI.setModel(modelEl.value.trim());
+        UI.log('Готово. Вставьте API-ключ и нажмите Connect.');
+      }
+
+      return { init };
+    })();
+
+    // Запуск
+    App.init();
+
+    // ----------------------------------------------
+    // "Куда резать" — выделение по классам/пространствам:
+    // - Auth: API-ключ → эфемерный токен; формирование WS URL.
+    // - LiveWS: connect/close, send, роутинг сообщений.
+    // - Audio: AudioWorklet, ресемпл 48k→16k PCM16, чанки 20–40мс.
+    // - UI: статусы, панели, лог, e2e-кнопки.
+    // - App: жизненный цикл, пайпинг всех модулей.
+    // - Utils: мелкие утилиты и base64.
+    // ----------------------------------------------
+  </script>
+</body>
+</html>
