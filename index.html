@@ -516,25 +516,35 @@
                 this.onError && this.onError(err);
                 reject(err);
               });
-              ws.addEventListener('message', (evt) => {
+              ws.addEventListener('message', async (evt) => {
+                let text;
                 try {
                   // Проверяем, является ли сообщение текстом
                   if (typeof evt.data === 'string') {
-                    const data = JSON.parse(evt.data);
+                    text = evt.data;
+                  } else if (evt.data instanceof Blob) {
+                    text = await evt.data.text();
+                  } else if (evt.data instanceof ArrayBuffer) {
+                    text = new TextDecoder().decode(evt.data);
+                  }
+
+                  if (text != null) {
+                    const data = JSON.parse(text);
                     this.onMessage && this.onMessage(data);
                   } else {
-                    // Обрабатываем бинарные сообщения
                     UI.log('WS: получено бинарное сообщение, размер:', evt.data.byteLength || evt.data.size || 'unknown');
-                    // Для бинарных сообщений пока просто логируем
+                    // Передаем необработанное бинарное сообщение дальше
                     this.onMessage && this.onMessage({ type: 'binary', data: evt.data });
                   }
                 } catch (e) {
                   UI.log('WS message parse error:', e.message);
-                  if (typeof evt.data === 'string') {
+                  if (text != null) {
+                    UI.log('WS message data (first 200 chars):', text.substring(0, 200));
+                  } else if (typeof evt.data === 'string') {
                     UI.log('WS message data (first 200 chars):', evt.data.substring(0, 200));
                   } else {
                     UI.log('WS message data type:', typeof evt.data);
-                    UI.log('WS message data constructor:', evt.data.constructor.name);
+                    UI.log('WS message data constructor:', evt.data.constructor?.name);
                   }
                 }
               });
