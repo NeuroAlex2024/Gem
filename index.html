@@ -131,9 +131,14 @@
       flex-direction: column;
       gap: 8px;
     }
+    #assistantOut > div {
+      background: rgba(255,255,255,0.03);
+      padding: 4px 6px;
+      border-left: 2px solid var(--border);
+      border-radius: 6px;
+    }
     #assistantOut .pending {
-      border-left: 2px solid var(--accent);
-      padding-left: 6px;
+      border-left-color: var(--accent);
       opacity: 0.8;
     }
     .chat-input {
@@ -609,6 +614,20 @@
       let pendingReply = '';
       let pendingEl = null;
 
+      function finalizePending() {
+        if (pendingEl) {
+          if (pendingReply) {
+            pendingEl.classList.remove('pending');
+          } else {
+            pendingEl.remove();
+          }
+          pendingEl = null;
+        } else if (pendingReply) {
+          UI.prependAssistantBlock(pendingReply);
+        }
+        pendingReply = '';
+      }
+
       function setButtonsConnected(connected) {
         connectBtn.disabled = connected;
         disconnectBtn.disabled = !connected;
@@ -773,14 +792,12 @@
         }
         if (msg.generationComplete) {
           UI.log('WS<-(generationComplete)');
-          if (pendingEl) { pendingEl.remove(); pendingEl = null; }
-          if (pendingReply) { UI.prependAssistantBlock(pendingReply); pendingReply = ''; }
+          finalizePending();
           return;
         }
         if (msg.turnComplete) {
           UI.log('WS<-(turnComplete)');
-          if (pendingEl) { pendingEl.remove(); pendingEl = null; }
-          if (pendingReply) { UI.prependAssistantBlock(pendingReply); pendingReply = ''; }
+          finalizePending();
           return;
         }
         // На всякий — выведем сырой кадр
