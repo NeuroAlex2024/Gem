@@ -131,6 +131,11 @@
       flex-direction: column;
       gap: 8px;
     }
+    #assistantOut .pending {
+      border-left: 2px solid var(--accent);
+      padding-left: 6px;
+      opacity: 0.8;
+    }
     .chat-input {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -759,6 +764,7 @@
               pendingReply += p.text;
               if (!pendingEl) {
                 pendingEl = UI.prependAssistantBlock('');
+                pendingEl.classList.add('pending');
               }
               Utils.setText(pendingEl, pendingReply);
             }
@@ -768,13 +774,13 @@
         if (msg.generationComplete) {
           UI.log('WS<-(generationComplete)');
           if (pendingEl) { pendingEl.remove(); pendingEl = null; }
-          if (pendingReply) { UI.appendAssistant(pendingReply); pendingReply = ''; }
+          if (pendingReply) { UI.prependAssistantBlock(pendingReply); pendingReply = ''; }
           return;
         }
         if (msg.turnComplete) {
           UI.log('WS<-(turnComplete)');
           if (pendingEl) { pendingEl.remove(); pendingEl = null; }
-          if (pendingReply) { UI.appendAssistant(pendingReply); pendingReply = ''; }
+          if (pendingReply) { UI.prependAssistantBlock(pendingReply); pendingReply = ''; }
           return;
         }
         // На всякий — выведем сырой кадр
