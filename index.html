@@ -243,6 +243,7 @@
         block.textContent = text;
         el.prepend(block);
         el.scrollTop = 0;
+        return block;
       },
       setText(el, text) {
         el.textContent = text;
@@ -291,7 +292,7 @@
         logEl.scrollTop = logEl.scrollHeight;
       }
       function appendAssistant(text) {
-        Utils.prependBlock(assistantOut, text);
+        return Utils.prependBlock(assistantOut, text);
       }
       function setAssistant(text) { Utils.setText(assistantOut, text); }
 
@@ -597,6 +598,13 @@
       let mic = null;
       let setupDone = false;
       let currentModel = modelEl.value;
+      let pendingReply = '';
+      let pendingEl = null;
+
+      function finalizePending() {
+        pendingReply = '';
+        pendingEl = null;
+      }
 
       function setButtonsConnected(connected) {
         connectBtn.disabled = connected;
@@ -750,17 +758,24 @@
           const parts = msg.serverContent.modelTurn.parts;
           for (const p of parts) {
             if (typeof p.text === 'string' && p.text.length) {
-              UI.appendAssistant(p.text);
+              pendingReply += p.text;
+              if (!pendingEl) {
+                pendingEl = UI.appendAssistant(pendingReply);
+              } else {
+                pendingEl.textContent = pendingReply;
+              }
             }
           }
           return;
         }
         if (msg.generationComplete) {
           UI.log('WS<-(generationComplete)');
+          finalizePending();
           return;
         }
         if (msg.turnComplete) {
           UI.log('WS<-(turnComplete)');
+          finalizePending();
           return;
         }
         // На всякий — выведем сырой кадр
