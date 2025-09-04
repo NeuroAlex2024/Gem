@@ -243,6 +243,7 @@
         block.textContent = text;
         el.prepend(block);
         el.scrollTop = 0;
+        return block;
       },
       setText(el, text) {
         el.textContent = text;
@@ -294,8 +295,11 @@
         Utils.prependBlock(assistantOut, text);
       }
       function setAssistant(text) { Utils.setText(assistantOut, text); }
+      function prependAssistantBlock(text) {
+        return Utils.prependBlock(assistantOut, text);
+      }
 
-      return { setWS, setMic, setModel, clearLog, log, appendAssistant, setAssistant };
+      return { setWS, setMic, setModel, clearLog, log, appendAssistant, setAssistant, prependAssistantBlock };
     })();
 
     // --------------------------------------------------------
@@ -597,6 +601,8 @@
       let mic = null;
       let setupDone = false;
       let currentModel = modelEl.value;
+      let pendingReply = '';
+      let pendingEl = null;
 
       function setButtonsConnected(connected) {
         connectBtn.disabled = connected;
@@ -750,17 +756,25 @@
           const parts = msg.serverContent.modelTurn.parts;
           for (const p of parts) {
             if (typeof p.text === 'string' && p.text.length) {
-              UI.appendAssistant(p.text);
+              pendingReply += p.text;
+              if (!pendingEl) {
+                pendingEl = UI.prependAssistantBlock('');
+              }
+              Utils.setText(pendingEl, pendingReply);
             }
           }
           return;
         }
         if (msg.generationComplete) {
           UI.log('WS<-(generationComplete)');
+          if (pendingEl) { pendingEl.remove(); pendingEl = null; }
+          if (pendingReply) { UI.appendAssistant(pendingReply); pendingReply = ''; }
           return;
         }
         if (msg.turnComplete) {
           UI.log('WS<-(turnComplete)');
+          if (pendingEl) { pendingEl.remove(); pendingEl = null; }
+          if (pendingReply) { UI.appendAssistant(pendingReply); pendingReply = ''; }
           return;
         }
         // На всякий — выведем сырой кадр
