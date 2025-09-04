@@ -616,16 +616,13 @@
 
       function finalizePending() {
         if (pendingEl) {
-          if (pendingReply) {
-            pendingEl.classList.remove('pending');
-          } else {
-            pendingEl.remove();
-          }
+          pendingEl.remove();
           pendingEl = null;
-        } else if (pendingReply) {
-          UI.prependAssistantBlock(pendingReply);
         }
-        pendingReply = '';
+        if (pendingReply) {
+          UI.appendAssistant(pendingReply);
+          pendingReply = '';
+        }
       }
 
       function setButtonsConnected(connected) {
@@ -777,6 +774,9 @@
           return;
         }
         if (msg.serverContent?.modelTurn?.parts) {
+          if (pendingReply || pendingEl) {
+            finalizePending();
+          }
           const parts = msg.serverContent.modelTurn.parts;
           for (const p of parts) {
             if (typeof p.text === 'string' && p.text.length) {
