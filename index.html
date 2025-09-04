@@ -126,6 +126,11 @@
       flex: 1;
       font-size: 15px;
     }
+    #assistantOut {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
     .chat-input {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -233,6 +238,12 @@
         el.textContent += text;
         el.scrollTop = el.scrollHeight;
       },
+      prependBlock(el, text) {
+        const block = document.createElement('div');
+        block.textContent = text;
+        el.prepend(block);
+        el.scrollTop = 0;
+      },
       setText(el, text) {
         el.textContent = text;
         el.scrollTop = el.scrollHeight;
@@ -279,7 +290,9 @@
         logEl.textContent += line + (obj ? ' ' + Utils.safeJSON(obj) : '') + '\n';
         logEl.scrollTop = logEl.scrollHeight;
       }
-      function appendAssistant(text) { Utils.appendText(assistantOut, text); }
+      function appendAssistant(text) {
+        Utils.prependBlock(assistantOut, text);
+      }
       function setAssistant(text) { Utils.setText(assistantOut, text); }
 
       return { setWS, setMic, setModel, clearLog, log, appendAssistant, setAssistant };
