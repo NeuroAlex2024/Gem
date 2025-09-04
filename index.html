@@ -99,7 +99,7 @@
 
     .panels {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
       gap: 12px;
     }
     .panel {
@@ -193,10 +193,6 @@
 
     <div class="panels">
       <div class="panel">
-        <h3>Вы сказали</h3>
-        <div class="body" id="youSaid"></div>
-      </div>
-      <div class="panel">
         <h3>Ассистент</h3>
         <div class="body" id="assistantOut"></div>
         <div class="chat-input">
@@ -263,7 +259,6 @@
       const micDot = Utils.el('micDot');
       const micLabel = Utils.el('micLabel');
       const modelLabel = Utils.el('modelLabel');
-      const youSaid = Utils.el('youSaid');
       const assistantOut = Utils.el('assistantOut');
       const logEl = Utils.el('log');
 
@@ -286,9 +281,8 @@
       }
       function appendAssistant(text) { Utils.appendText(assistantOut, text); }
       function setAssistant(text) { Utils.setText(assistantOut, text); }
-      function setYouSaid(text) { Utils.setText(youSaid, text); }
 
-      return { setWS, setMic, setModel, clearLog, log, appendAssistant, setAssistant, setYouSaid };
+      return { setWS, setMic, setModel, clearLog, log, appendAssistant, setAssistant };
     })();
 
     // --------------------------------------------------------
@@ -620,7 +614,6 @@
         const apiKey = apiKeyEl.value.trim();
         if (!apiKey) { UI.log('Введите API Key'); return; }
         UI.setAssistant('');
-        UI.setYouSaid('');
         UI.log('Connect: начинаю подключение…');
         UI.setWS(false);
         UI.setMic(false);
@@ -738,7 +731,6 @@
         }
         if (msg.inputTranscription?.text != null) {
           UI.log('WS<-(inputTranscription)', msg.inputTranscription);
-          UI.setYouSaid(msg.inputTranscription.text || '');
           return;
         }
         if (msg.serverContent?.modelTurn?.parts) {
